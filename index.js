@@ -16,7 +16,7 @@ connectDB();
 try {
 app.get("/",(req,res)=>{
     res.status(200).send("Welcome to backend")
-    })
+    });
 } catch (error) {
     res.status(500).send("Internal server error")
 }
