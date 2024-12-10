@@ -14,6 +14,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  randomString: {
+    type: String,
+    default: "nostring",
+  },
   token: {
     type: String,
   },

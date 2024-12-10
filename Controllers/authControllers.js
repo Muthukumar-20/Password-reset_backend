@@ -3,8 +3,16 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import crypto from 'crypto'; 
 
 dotenv.config();
+
+//ganrate the random string for forget password
+function ganrateRandomString(){
+  return crypto.randomBytes(32).toString("hex")
+}
+export const stringtoken = ganrateRandomString();
+
 
 export const registerUser = async (req, res) => {
   try {
@@ -39,7 +47,7 @@ export const loginUser = async (req, res) => {
     await user.save();
     res
       .status(200)
-      .json({ message: "User Logged In Successfully", token: token });
+      .json({ message: "User Logged In Successfully", token: token ,userid: user._id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -48,61 +56,76 @@ export const loginUser = async (req, res) => {
 
 //forget password page
 
-export const forgetPassword=async(req,res)=>{
-try {
-  const {email}=req.body
-  const user=await User.findOne({email})
-  if(!user){
-    return res.status(404).json({message:"User Not Found"})
-  }
-  const Token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
-    expiresIn: "1h",
-  });
-  const transporter = nodemailer.createTransport({
-    service: "Gmail",
-  
-    auth: {
-      user: process.env.PASS_MAIL,
-      pass: process.env.PASS_KEY,
-    },
-  });
-  const mailOption={
-    from:process.env.PASS_MAIL,
-    to:user.email,
-    subject:"password Reset Link",
-    text: `That receving message is reset your password and your account.
-    Pleace click the link and complete in our browser proceess
-    http://localhost:5173/reset-password/${user._id}/${Token}`
-   };
-   transporter.sendMail(mailOption,function(error,info){
-    if(error){
-      console.log(error);
-      res.status(500).json({message:"Internal server error"})      
+export const forgetPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User Not Found" });
     }
-    else{
-      res.status(200).json({message:"Email Sent Successfully"})
+    user.randomString = stringtoken;
+    await user.save();
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    const transporter = nodemailer.createTransport({
+      service: "Gmail", 
+      auth: {
+        user: process.env.PASS_MAIL,
+        pass: process.env.PASS_KEY, 
+      secure: true,
+      tls: {
+        rejectUnauthorized: false, 
+      },
+    }});
+
+
+    const mailOptions = {
+      from: process.env.PASS_MAIL,
+      to: user.email,
+      subject: "Password Reset Link",
+      text: `You are receiving this message because you requested a password reset for your account.
+    
+      Please click on the following link to reset your password:
+
+      https://password-reset-frontend-eight.vercel.app/reset-password/${stringtoken}
+
+      This link will expire in 1 hour. If you did not request a password reset, please ignore this email.
+
+      Sincerely,
+
+     Your friend`, 
+    };
+    try {
+      await transporter.sendMail(mailOptions);
+      res.status(200).json({ message: "Password reset email sent successfully. Please check your inbox.Email Sent Successfully" });
+    } catch (error) {
+      console.error("Error sending email:", error);
+      res.status(500).json({ message: error.message });
     }
-   })
+  } catch (error) {
+    console.error("Error in forgetPassword:", error);
+    res.status(500).json({ message: error.message }); 
   }
- catch (error) {
-  res.status(500).json({message:error.message})
-}
 };
 
+
 export const resetPassword=async(req,res)=>{
-  const {id,token}= req.params
+  const { stringtoken } = req.params;
   const {password} = req.body
-  jwt.verify(token,process.env.JWT_SECRET,(error,decoded)=>{
+  jwt.verify( stringtoken,process.env.JWT_SECRET,(error,decoded)=>{
     if(error){
-      return res.status(404).json({message:"Invaild token"})
+      return res.status(404).json({message:error.message})
     }
     else{
       bcrypt.hash(password,10)
       .then(hash=>{
-        User.findByIdAndUpdate({_id:id},{password:hash})
+        User.findByIdAndUpdate({_id:id},{password:hash},{randomString:""})
         .then(ele=>res.send({status:"Success"}))
-        .catch(error=>res.send({status:error}))
+        .catch(err => res.status(500).send({ status: err.message }));
       })
     }
   })
-} 
+ }; 
+
+
